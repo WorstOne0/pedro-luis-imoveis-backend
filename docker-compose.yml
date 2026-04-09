@@ -1,0 +1,26 @@
+services:
+  backend:
+    restart: unless-stopped
+    build: .
+    environment:
+      - MONGO_DB=mongodb://user:pass@mongodb
+      - LETSENCRYPT_HOST=${HOST}
+      - VIRTUAL_HOST=${HOST}
+      - VIRTUAL_PORT=${PORT}
+    ports:
+      - ${PORT}:${PORT}
+    expose:
+      - ${PORT}
+    depends_on:
+      - mongodb
+  # mongodb:
+  #   image: mongodb/mongodb-community-server:6.0-ubi8
+  #   restart: unless-stopped
+  #   environment:
+  #     - MONGO_INITDB_ROOT_USERNAME=user
+  #     - MONGO_INITDB_ROOT_PASSWORD=pass
+  #     - MONGO_INITDB_DATABASE=pedro_luis_imoveis
+  #   volumes:
+  #     - type: bind
+  #       source: ./data
+  #       target: /data/db
