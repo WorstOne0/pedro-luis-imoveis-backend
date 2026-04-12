@@ -29,7 +29,9 @@ export default {
   create: async (req, res) => {
     try {
       const { metadata, images, thumbnail } = req.body;
-      const body = { ...JSON.parse(metadata), images, thumbnail };
+
+      const { title, description, type, sale, price, area, rooms, bathrooms, garages, featured, address } = JSON.parse(metadata);
+      const body = { title, description, type, sale, price, area, rooms, bathrooms, garages, featured, address, images, thumbnail };
 
       const realEstate = await RealEstate.create(body);
 
@@ -55,9 +57,7 @@ export default {
   importOldDB: async (req, res) => {
     try {
       console.log("Importing Old DB...");
-      const oldDB = mongoose.createConnection("mongodb+srv://admin:dev@cluster0.2agfw.mongodb.net/?appName=Cluster0", {
-        useNewUrlParser: true,
-      });
+      const oldDB = mongoose.createConnection(process.env.OLD_MONGO_DB, { useNewUrlParser: true });
 
       const postSchema = new mongoose.Schema({
         postedBy: {
@@ -216,6 +216,8 @@ export default {
         const realEstate = await RealEstate.create(realEstateObj);
         list.push(realEstate);
       }
+
+      await oldDB.close();
 
       return res.json({ status: 200, payload: list, message: "Ok!" });
     } catch (error) {

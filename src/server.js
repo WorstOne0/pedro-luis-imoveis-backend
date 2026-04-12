@@ -28,12 +28,9 @@ app.use(router);
 const __dirname = path.resolve();
 app.use("/images", express.static(path.join(__dirname, "public")));
 
-// Database Connect
+// Database Connect and Initialize the super admin to the database
 console.log("Connecting to Database...", process.env.MONGO_DB);
-mongoose.connect(process.env.MONGO_DB, { useNewUrlParser: true });
-
-// Add the super admin to the database
-initSuperAdmin();
+mongoose.connect(process.env.MONGO_DB, { useNewUrlParser: true }).then(() => initSuperAdmin());
 
 // Start Server
 app.listen(process.env.PORT, () => {

@@ -3,7 +3,7 @@ import FormData from "form-data";
 
 export default async (req, res, next) => {
   try {
-    if (req.files["thumbnail"]) {
+    if (req.files && req.files["thumbnail"]) {
       const file = req.files["thumbnail"][0];
 
       const form = new FormData();
@@ -17,7 +17,7 @@ export default async (req, res, next) => {
       delete req.files["thumbnail"];
     }
 
-    if (req.files["images"] && req.files["images"].length > 0) {
+    if (req.files && req.files["images"] && req.files["images"].length > 0) {
       const form = new FormData();
       for (const file of req.files["images"]) {
         form.append("files", file.buffer, { filename: file.originalname, contentType: file.mimetype });

@@ -30,7 +30,6 @@ const UserSchema = new Schema(
       enum: ["Super Admin", "Admin", "Moderator", "User", "Guest"],
       default: "Guest",
     },
-
     // Profile
     screenName: {
       type: String,
@@ -42,18 +41,8 @@ const UserSchema = new Schema(
     thumbnail: {
       type: String,
     },
-
-    // Dates
-    createdAt: {
-      type: Date,
-      default: Date.now(),
-    },
-    updatedAt: {
-      type: Date,
-      default: Date.now(),
-    },
   },
-  { timestamps: true, versionKey: false }
+  { timestamps: true, versionKey: false },
 );
 
 UserSchema.plugin(mongoosePaginate);

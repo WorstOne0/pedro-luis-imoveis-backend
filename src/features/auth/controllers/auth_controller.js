@@ -10,12 +10,13 @@ export default {
   login: async (req, res, next) => {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email }, { password: 0 });
-    const userDecrypt = await User.findOne({ email });
+    if (!email || !password) return res.json({ status: 400, error: "Missing email or password" });
 
-    if (!user) {
-      return res.json({ status: 404, error: "User not Found" });
-    }
+    const userDecrypt = await User.findOne({ email });
+    if (!userDecrypt) return res.status(404).json({ error: "User not Found" });
+
+    const user = userDecrypt.toObject();
+    delete user.password;
 
     // Decrypt the Password
     if (!(await bcrypt.compare(password, userDecrypt.password))) {
@@ -23,19 +24,14 @@ export default {
       return res.json({ status: 401, error: "Incorrect email or password" });
     }
 
-    // Create Token
     const accessToken = createToken(user);
-
     return res.json({ status: 200, accessToken });
   },
   session: async (req, res, next) => {
     const { user } = req;
 
     const sessionUser = await User.findOne({ _id: user._id }, { password: 0 });
-
-    if (!sessionUser) {
-      return res.json({ status: 404, error: "User not Found" });
-    }
+    if (!sessionUser) return res.json({ status: 404, error: "User not Found" });
 
     return res.json({ status: 200, user: sessionUser });
   },
