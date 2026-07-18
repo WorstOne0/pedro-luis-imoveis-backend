@@ -1,6 +1,16 @@
 import axios from "axios";
 import FormData from "form-data";
 
+const postToImageServer = async (endpoint, form, authorization) => {
+  const response = await axios.post(`${process.env.IMAGE_SERVER}${endpoint}`, form, {
+    headers: { ...form.getHeaders(), Authorization: authorization },
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+  });
+
+  return response.data.payload;
+};
+
 export default async (req, res, next) => {
   try {
     if (req.files && req.files["thumbnail"]) {
@@ -9,11 +19,9 @@ export default async (req, res, next) => {
       const form = new FormData();
       form.append("file", file.buffer, { filename: file.originalname, contentType: file.mimetype });
 
-      const response = await axios.post(`${process.env.IMAGE_SERVER}/upload/single`, form, {
-        headers: { "Content-Type": "multipart/form-data", Authorization: req.headers.authorization },
-      });
+      const payload = await postToImageServer("/upload/single", form, req.headers.authorization);
+      req.body.thumbnail = payload.path;
 
-      req.body.thumbnail = response.data.payload.path;
       delete req.files["thumbnail"];
     }
 
@@ -23,19 +31,21 @@ export default async (req, res, next) => {
         form.append("files", file.buffer, { filename: file.originalname, contentType: file.mimetype });
       }
 
-      const response = await axios.post(`${process.env.IMAGE_SERVER}/upload/many`, form, {
-        headers: { "Content-Type": "multipart/form-data", Authorization: req.headers.authorization },
-      });
-
-      const imageUrls = response.data.payload.map((image) => image.path);
-      req.body.images = imageUrls;
+      const payload = await postToImageServer("/upload/many", form, req.headers.authorization);
+      req.body.images = payload.map((image) => image.path);
 
       delete req.files["images"];
     }
 
     return next();
   } catch (error) {
-    console.log("Error - real_estate_upload.js", error);
-    return res.json({ status: 500, message: JSON.stringify(error) });
+    console.log("Error - real_estate_upload.js", error?.response?.data ?? error.message);
+
+    // Surface the image server's own rejection (bad type, too large, expired
+    // token) instead of flattening everything into a 500.
+    const status = error?.response?.status ?? 502;
+    const message = error?.response?.data?.message ?? "Erro ao enviar imagens";
+
+    return res.status(status).json({ status, message });
   }
 };
