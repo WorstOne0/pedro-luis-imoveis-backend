@@ -48,6 +48,11 @@ export default (query = {}) => {
   if (query.featured === "true") filter.featured = true;
   if (query.featured === "false") filter.featured = false;
 
+  // `sold=false` has to match documents predating the field, which have no
+  // `sold` key at all — hence $ne rather than a plain equality.
+  if (query.sold === "true") filter.sold = true;
+  if (query.sold === "false") filter.sold = { $ne: true };
+
   const minPrice = toInt(query.minPrice);
   const maxPrice = toInt(query.maxPrice);
   if (minPrice !== null || maxPrice !== null) {

@@ -3,6 +3,7 @@ import RealEstate from "../models/real_estate.js";
 //
 import mongoose from "mongoose";
 import buildQuery from "../utils/real_estate_query.js";
+import { deleteFromImageServer } from "../../../services/image_server.js";
 
 // Fields a client is allowed to write. Anything else in the body is dropped so
 // a caller cannot reach schema fields we never meant to expose.
@@ -17,6 +18,7 @@ const WRITABLE = [
   "bathrooms",
   "garages",
   "featured",
+  "sold",
   "features",
   "address",
   "images",
@@ -112,6 +114,13 @@ export default {
     try {
       const realEstate = await RealEstate.findOneAndDelete({ _id });
       if (!realEstate) return res.status(404).json({ status: 404, message: "Imóvel não encontrado" });
+
+      // The listing is gone either way. Orphaned files are a disk-space problem;
+      // a failed cleanup is not worth failing the request the client asked for.
+      const files = [realEstate.thumbnail, ...(realEstate.images ?? [])];
+      const { failed } = await deleteFromImageServer(files, req.headers.authorization);
+
+      if (failed.length > 0) console.log(`Warning - real_estate ${_id} deleted, but these files remain:`, failed);
 
       return res.status(200).json({ status: 200, payload: realEstate, message: "Ok!" });
     } catch (error) {

@@ -15,37 +15,72 @@ const LEGACY_ROLES = {
   Guest: "guest",
 };
 
+/**
+ * Reads the seed accounts out of the environment.
+ *
+ * Numbered suffixes rather than one comma-separated list: a comma is a legal
+ * password character, so splitting `ADMIN_PASSWORD` on commas would quietly
+ * truncate a perfectly good password and seed an account nobody can log into.
+ * Parallel lists also drift — two emails and one password is a silent misparse.
+ *
+ * `ADMIN_ACCOUNT` is the first account (unchanged, so existing .env files keep
+ * working), then `ADMIN_ACCOUNT_2`, `_3` and so on until one is missing.
+ */
+const readAdmins = () => {
+  const admins = [];
+
+  for (let index = 1; ; index++) {
+    const suffix = index === 1 ? "" : `_${index}`;
+    const email = process.env[`ADMIN_ACCOUNT${suffix}`];
+
+    if (!email) break;
+
+    admins.push({
+      email,
+      password: process.env[`ADMIN_PASSWORD${suffix}`],
+      userName: process.env[`ADMIN_USERNAME${suffix}`],
+      screenName: process.env[`ADMIN_SCREENNAME${suffix}`],
+      picture: process.env[`ADMIN_PICTURE${suffix}`],
+    });
+  }
+
+  return admins;
+};
+
 export default async function () {
   for (const [legacy, current] of Object.entries(LEGACY_ROLES)) {
     await User.updateMany({ role: legacy }, { $set: { role: current } });
   }
 
-  const email = process.env.ADMIN_ACCOUNT;
-  const password = process.env.ADMIN_PASSWORD;
-  const username = process.env.ADMIN_USERNAME;
-  const screenName = process.env.ADMIN_SCREENNAME;
-  const picture = process.env.ADMIN_PICTURE;
+  const admins = readAdmins();
 
-  if (!email || !password) {
-    console.log("ADMIN_ACCOUNT / ADMIN_PASSWORD not set - skipping super admin seed");
+  if (admins.length === 0) {
+    console.log("ADMIN_ACCOUNT not set - skipping super admin seed");
     return;
   }
 
-  const duplicate = await User.findOne({ email });
-  if (duplicate) return;
+  for (const { email, password, userName, screenName, picture } of admins) {
+    if (!password) {
+      console.log(`No password set for "${email}" - skipping`);
+      continue;
+    }
 
-  // Hash only when actually creating the account; hashing on every boot cost a
-  // few hundred ms for nothing.
-  const hashedPassword = await bcrypt.hash(password, 10);
+    const duplicate = await User.findOne({ email });
+    if (duplicate) continue;
 
-  await User.create({
-    email,
-    password: hashedPassword,
-    userName: username,
-    role: "super_admin",
-    screenName,
-    profilePicture: picture,
-  });
+    // Hash only when actually creating the account; hashing on every boot cost a
+    // few hundred ms for nothing.
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-  console.log(`Seeded super admin "${email}"`);
+    await User.create({
+      email,
+      password: hashedPassword,
+      userName,
+      role: "super_admin",
+      screenName,
+      profilePicture: picture,
+    });
+
+    console.log(`Seeded super admin "${email}"`);
+  }
 }

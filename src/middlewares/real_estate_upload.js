@@ -1,15 +1,5 @@
-import axios from "axios";
 import FormData from "form-data";
-
-const postToImageServer = async (endpoint, form, authorization) => {
-  const response = await axios.post(`${process.env.IMAGE_SERVER}${endpoint}`, form, {
-    headers: { ...form.getHeaders(), Authorization: authorization },
-    maxBodyLength: Infinity,
-    maxContentLength: Infinity,
-  });
-
-  return response.data.payload;
-};
+import { postToImageServer } from "../services/image_server.js";
 
 export default async (req, res, next) => {
   try {

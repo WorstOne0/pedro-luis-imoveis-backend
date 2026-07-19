@@ -50,3 +50,25 @@ src/
 
 The legacy import route only responds when `ENABLE_LEGACY_IMPORT=true` and the
 caller is a Super Admin. Leave it off.
+
+## District filtering
+
+`district` accepts a csv and is matched **case-insensitively**, because the
+public map's polygon data is uppercase (`CANCELLI`) while listings are title case
+(`Cancelli`). Before that, exact matching meant clicking any district on the map
+returned nothing.
+
+It is still **accent-sensitive** — `CANADA` will not match a stored `Canadá`. The
+frontend resolves polygon names to the catalogue's spelling before calling the
+API, so that step is load-bearing. Folding accents here would make the API robust
+on its own.
+
+## Data problem to be aware of
+
+17 of the 25 listings have `address.position = {lat: 0, lng: 0}`. `importOldDB`
+wrote zeros where the source had no coordinates instead of leaving `position`
+unset, so those listings plot in the Atlantic. The frontend filters them out,
+which means the public map shows 8 of 25.
+
+Two fixes worth making: backfill the coordinates, and change `importOldDB` to
+leave `position` unset so it cannot recur.

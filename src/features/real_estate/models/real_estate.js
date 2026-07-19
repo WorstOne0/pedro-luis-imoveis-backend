@@ -51,6 +51,12 @@ const RealEstateSchema = new Schema(
       type: Boolean,
       default: false,
     },
+    // A flag rather than a delete: a sold property is still worth showing as
+    // proof of work, and the broker may want to bring it back.
+    sold: {
+      type: Boolean,
+      default: false,
+    },
     //
     address: {
       cep: {

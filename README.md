@@ -1,216 +1,164 @@
 # Pedro Luis Imóveis — Backend API
 
-> RESTful API for a real estate listing platform — manages properties, authentication, and image uploads.
+> REST API for a real estate listing platform. Property CRUD with rich
+> filtering, JWT auth with roles, and an upload pipeline that proxies to a
+> separate image service.
 
----
+One of five repositories that make up the product:
 
-## 🚀 Features
-
-- **JWT Authentication** — Secure login with bcrypt password hashing and 5-hour token expiry
-- **Real Estate CRUD** — Create, update, and query property listings with filtering and pagination
-- **Image Upload Pipeline** — Thumbnail and gallery uploads (up to 10 images) proxied to an external image server
-- **Role-Based Access Control** — User roles: Super Admin, Admin, Moderator, User, Guest
-- **Auto Super Admin Init** — On startup, seeds the database with a Super Admin account from environment variables
-- **Docker Ready** — Ships with a `Dockerfile` and `docker-compose.yml` for easy deployment
-
----
-
-## 📸 Preview
-
-This is a backend-only API. No UI is included. Integration with a frontend client (web or mobile) is expected via HTTP REST calls.
-
----
-
-## 🛠 Tech Stack
-
-| Layer | Technology |
+| Repository | Role |
 |---|---|
-| Runtime | Node.js (ESM) |
-| Framework | Express 4 |
-| Database | MongoDB + Mongoose 7 |
-| Auth | jsonwebtoken + bcrypt |
-| File Handling | Multer + Axios (external image server) |
-| Pagination | mongoose-paginate-v2 |
-| Config | dotenv |
-| Container | Docker + Docker Compose |
+| frontend | Public site — map + listings |
+| dashboard | Admin panel — listing CRUD, uploads, auth |
+| **backend** (this one) | REST API |
+| images | Upload, resize and serve photos/video |
+| database | MongoDB container + backup scripts |
 
 ---
 
-## 📂 Project Structure
+## Features
+
+- **Listing CRUD** with filtering by type, sale kind, price, area, rooms,
+  bathrooms, garages, district, city and free-text search.
+- **JWT auth** — bcrypt hashing, 5-hour tokens, role-based access
+  (`super_admin`, `admin`, `moderator`, `user`, `guest`).
+- **Upload proxy** — accepts multipart writes and forwards files to the image
+  service, propagating its status rather than swallowing it.
+- **Write whitelist** — anything outside a known field list is dropped, so a
+  caller cannot reach schema fields that were never meant to be exposed.
+- **Seeded super admin** on first boot, from environment variables.
+- **Docker ready** — `Dockerfile` and `docker-compose.yml` for the nginx-proxy
+  setup.
+
+---
+
+## Tech stack
+
+Node.js · Express 4 · MongoDB + Mongoose 7 · JWT · bcrypt · multer
+
+---
+
+## Getting started
+
+Requires Node 20+ and MongoDB on `127.0.0.1:27017` (local service, or the
+`pedro_luis_imoveis_database` container).
+
+```bash
+npm install
+cp .env.example .env     # then fill it in
+npm start                # http://localhost:4000
+```
+
+### Environment
+
+| Variable | Purpose |
+|---|---|
+| `PORT` | Listen port (4000) |
+| `MONGO_DB` | Connection string |
+| `ACCESS_TOKEN_JWT` | Token signing secret — must match the images service |
+| `IMAGE_SERVER` | Base url of the images service |
+| `ADMIN_ACCOUNT` `ADMIN_USERNAME` `ADMIN_PASSWORD` `ADMIN_SCREENNAME` `ADMIN_PICTURE` | Seed super admin, created on first boot |
+| `ENABLE_LEGACY_IMPORT` | Must be `"true"` to expose the legacy import route — leave it off |
+| `OLD_MONGO_DB` | Source connection string for that import |
+
+---
+
+## API
+
+Every response is `{ status, message, ... }`, with the HTTP status matching the
+body. List endpoints return `payload` as an array; single-resource endpoints
+return `payload` as the document.
+
+| Route | Method | Auth | Purpose |
+|---|---|---|---|
+| `/real_estate` | `GET` | — | List, filterable |
+| `/real_estate/:_id` | `GET` | — | One listing |
+| `/real_estate` | `POST` | ✅ | Create (multipart) |
+| `/real_estate/:_id` | `PUT` | ✅ | Update (multipart, id in path) |
+| `/real_estate/:_id` | `DELETE` | ✅ | Delete |
+| `/login` | `POST` | — | Returns `accessToken` |
+| `/session` | `GET` | ✅ | Current user |
+| `/real_estate/oldDB/import` | `POST` | ✅ `super_admin` | Legacy import, env-gated |
+
+### `GET /real_estate` query parameters
+
+`limit`, `sort` (`recent|oldest|price_asc|price_desc|area_asc|area_desc`),
+`type` (csv), `sale`, `featured`, `minPrice`, `maxPrice`, `minArea`, `maxArea`,
+`rooms`, `bathrooms`, `garages`, `district` (csv), `city`, `search`, `exclude`.
+
+Property types are `apartment | house | land | shop | sobrado`.
+
+**There is no default limit.** The public map needs every match to draw its
+markers, so paging would break it. `limit` stays available for callers that only
+want a slice.
+
+**Room, bathroom and garage counts are "at least N"** — a 3-bedroom house
+matches a search for 2.
+
+**`district` is matched case-insensitively** because the public map's polygon
+data is uppercase (`CANCELLI`) while listings are title case (`Cancelli`). It is
+still **accent-sensitive**: `CANADA` will not match a stored `Canadá`.
+
+---
+
+## Project structure
 
 ```
 src/
-├── server.js                  # Entry point — Express app setup, DB connection
-├── init.js                    # Seeds Super Admin on startup
-├── routes/
-│   ├── index.js               # Aggregates all routes
-│   └── version.js             # GET /version health check
-├── features/
-│   ├── auth/
-│   │   ├── controllers/       # login, session logic
-│   │   └── routes/            # POST /login, GET /session
-│   ├── real_estate/
-│   │   ├── controllers/       # get, getById, create, update, importOldDB
-│   │   ├── models/            # RealEstate Mongoose schema
-│   │   └── routes/            # Real estate endpoints
-│   └── user/
-│       └── models/            # User Mongoose schema
-└── middlewares/
-    ├── index.js               # Re-exports jwt and upload middlewares
-    ├── jwt.js                 # createToken / verifyToken
-    └── real_estate_upload.js  # Proxies file uploads to IMAGE_SERVER
+  features/
+    real_estate/
+      controllers/  models/  routes/
+      utils/real_estate_query.js    query builder
+    user/
+  middlewares/      auth, role guard, upload proxy
+  init.js           seeds the super admin, migrates legacy role values
+  server.js
 ```
 
 ---
 
-## ⚙️ Installation
+## Notes for anyone reading the code
 
-**Prerequisites:** Node.js 18+, MongoDB instance
+**Responses carry real HTTP status codes.** They used to return HTTP 200 with
+`{status: 500}` in the body, which meant clients checking `response.status`
+never saw failures — logins appeared to succeed silently.
 
-```bash
-# Clone the repository
-git clone <repo-url>
-cd pedro_luis_imoveis_backend
+**User input is regex-escaped** before reaching a `$regex` filter, so a search
+for `a(` can't throw and `.*` can't be used to scan the collection.
 
-# Install dependencies
-npm install
-
-# Configure environment variables
-cp .env.example .env
-# Edit .env with your values (see Environment Variables section)
-```
-
-### Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-PORT=3000
-MONGO_DB=mongodb://user:pass@localhost:27017/pedro_luis_imoveis
-ACCESS_TOKEN_JWT=your_jwt_secret
-
-# External image server URL
-IMAGE_SERVER=http://your-image-server
-
-# Initial Super Admin
-ADMIN_ACCOUNT=admin@example.com
-ADMIN_PASSWORD=strongpassword
-ADMIN_USERNAME=admin
-ADMIN_SCREENNAME=Admin
-ADMIN_PICTURE=https://example.com/avatar.jpg
-```
+**The query builder lives in `utils/`, not `controllers/`** — it builds a filter,
+it doesn't handle a request.
 
 ---
 
-## ▶️ Usage
+## Known limitations
 
-```bash
-# Development (with hot reload via nodemon)
-npm run dev
-
-# Production
-npm start
-```
-
-### Docker
-
-```bash
-# Build and run with Docker Compose
-HOST=api.yourdomain.com PORT=3000 docker-compose up -d
-```
+- 17 of the 25 current listings have `address.position = {lat: 0, lng: 0}` from
+  the legacy import, which wrote zeros instead of leaving coordinates unset. They
+  need geocoding, and `importOldDB` should be changed to leave `position` unset
+  so it can't recur.
+- District filtering is accent-sensitive; the frontend compensates.
+- No test suite. Verification is manual, against local MongoDB.
 
 ---
 
-## 🔌 API Endpoints
+## Project status and contributions
 
-### Auth
+This is a commissioned project built for a specific business. It is **not** an
+open source project and is not accepting contributions, feature requests or
+pull requests.
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| `POST` | `/login` | No | Login and receive a JWT |
-| `GET` | `/session` | Yes | Get current authenticated user |
+## Copyright and licence
 
-**Login request body:**
-```json
-{
-  "email": "user@example.com",
-  "password": "yourpassword"
-}
-```
+**Copyright © 2026 Lucca Gabriel. All rights reserved.**
 
-**Login response:**
-```json
-{
-  "status": 200,
-  "accessToken": "<jwt>"
-}
-```
+This repository is published so the source can be **read**, as a portfolio piece
+and for reference. It is deliberately published **without a licence**, which
+under default copyright law means all rights are reserved.
 
----
+Viewing and forking within GitHub are permitted by GitHub's Terms of Service.
+That does **not** grant permission to use, copy, modify, deploy or redistribute
+this code. Third-party dependencies keep their own licences, and Pedro Luis
+Imóveis brand assets are the property of their owner.
 
-### Real Estate
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| `GET` | `/real_estate` | No | List all properties (paginated) |
-| `POST` | `/real_estate/:_id` | No | Get a single property by ID |
-| `POST` | `/real_estate` | Yes | Create a new property listing |
-| `PUT` | `/real_estate` | Yes | Update an existing property |
-| `POST` | `/real_estate/oldDB/import` | Yes | Import records from legacy DB |
-
-**Protected routes** require the header:
-```
-Authorization: Bearer <jwt>
-```
-
-**File upload fields** (`multipart/form-data`):
-- `thumbnail` — 1 image
-- `images` — up to 10 images
-
-**Property fields:** `type` (apartment | house | land | shop | sobrado), `sale` (sell | rent | both), `price`, `area`, `rooms`, `bathrooms`, `garages`, `address` (cep, street, district, city, state, number), `featured`
-
----
-
-### Utility
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/version` | Returns API version info |
-
----
-
-## 🧪 Testing
-
-No automated test suite is configured in the current codebase.
-
----
-
-## 📌 Roadmap
-
-- Add automated tests (unit + integration)
-- Add user management endpoints (create, update, delete users)
-- Add property search/filtering by price, type, location
-- Add refresh token support
-- Integrate AWS S3 directly for image storage (AWS SDK is already a dependency)
-
----
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Commit your changes: `git commit -m 'Add your feature'`
-4. Push to the branch: `git push origin feature/your-feature`
-5. Open a Pull Request
-
----
-
-## 📄 License
-
-MIT — see [LICENSE](LICENSE) for details.
-
----
-
-> **Short description (for GitHub):** RESTful backend API for real estate listings with JWT auth, MongoDB, image upload, and Docker support.
-
-**Suggested GitHub tags:** `nodejs` `express` `mongodb` `mongoose` `rest-api` `jwt` `real-estate` `docker` `javascript` `esm`
+See [`COPYRIGHT.md`](COPYRIGHT.md) for the full terms.
