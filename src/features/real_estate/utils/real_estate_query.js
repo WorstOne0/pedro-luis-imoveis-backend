@@ -56,8 +56,17 @@ export default (query = {}) => {
     if (maxPrice !== null) filter.price.$lte = maxPrice;
   }
 
-  const minArea = atLeast(query.minArea);
-  if (minArea) filter.area = minArea;
+  const minArea = toInt(query.minArea);
+  const maxArea = toInt(query.maxArea);
+  if (minArea !== null || maxArea !== null) {
+    filter.area = {};
+    if (minArea !== null) filter.area.$gte = minArea;
+    if (maxArea !== null) filter.area.$lte = maxArea;
+  }
+
+  // Excludes a single listing, used by "imóveis similares" so the listing being
+  // viewed does not appear among its own suggestions.
+  if (query.exclude) filter._id = { $ne: String(query.exclude) };
 
   // Room counts are "at least N" — a 3 bedroom house still matches a
   // search for 2 bedrooms.
@@ -70,8 +79,22 @@ export default (query = {}) => {
   const garages = atLeast(query.garages);
   if (garages) filter.garages = garages;
 
-  if (query.district) filter["address.district"] = String(query.district);
-  if (query.city) filter["address.city"] = String(query.city);
+  // Districts arrive as a csv so the public map can filter by several at once.
+  // Matched case-insensitively on purpose: the map's polygon names are
+  // uppercase ("CANCELLI") while the listings are title case ("Cancelli"), so
+  // an exact match returned nothing for every district drawn on the map.
+  if (query.district) {
+    const districts = String(query.district)
+      .split(",")
+      .map((district) => district.trim())
+      .filter(Boolean)
+      .map((district) => new RegExp(`^${escapeRegex(district)}$`, "i"));
+
+    if (districts.length === 1) filter["address.district"] = districts[0];
+    else if (districts.length > 1) filter["address.district"] = { $in: districts };
+  }
+
+  if (query.city) filter["address.city"] = new RegExp(`^${escapeRegex(String(query.city).trim())}$`, "i");
 
   if (query.search) {
     const term = new RegExp(escapeRegex(String(query.search).trim()), "i");
@@ -79,12 +102,15 @@ export default (query = {}) => {
     filter.$or = [{ title: term }, { description: term }, { "address.street": term }, { "address.district": term }, { "address.city": term }];
   }
 
-  const page = Math.max(toInt(query.page) ?? 1, 1);
-  const limit = Math.min(Math.max(toInt(query.limit) ?? 20, 1), 100);
+  // No default limit. The catalogue is a few hundred listings at most, and the
+  // public map needs every match to draw its markers, so paging would actively
+  // break it. `limit` stays available for callers that only want a slice.
+  const limit = toInt(query.limit);
 
   return {
     filter,
-    options: { page, limit, sort: SORTS[query.sort] ?? SORTS.recent },
+    sort: SORTS[query.sort] ?? SORTS.recent,
+    limit: limit && limit > 0 ? limit : null,
   };
 };
 

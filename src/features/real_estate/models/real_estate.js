@@ -87,6 +87,11 @@ const RealEstateSchema = new Schema(
       },
     },
     //
+    features: {
+      type: [String],
+      default: [],
+    },
+    //
     thumbnail: {
       type: String,
     },

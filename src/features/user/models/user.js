@@ -27,8 +27,8 @@ const UserSchema = new Schema(
     role: {
       type: String,
       required: true,
-      enum: ["Super Admin", "Admin", "Moderator", "User", "Guest"],
-      default: "Guest",
+      enum: ["super_admin", "admin", "moderator", "user", "guest"],
+      default: "guest",
     },
     // Profile
     screenName: {
@@ -36,9 +36,6 @@ const UserSchema = new Schema(
       required: true,
     },
     profilePicture: {
-      type: String,
-    },
-    thumbnail: {
       type: String,
     },
   },

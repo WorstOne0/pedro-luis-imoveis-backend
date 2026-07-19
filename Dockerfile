@@ -1,14 +1,18 @@
-FROM node:21-alpine
-
-# ENV PNPM_HOME="/pnpm"
-# ENV PATH="$PNPM_HOME:$PATH"
-# RUN corepack enable
+FROM node:22-alpine
 
 WORKDIR /app
-COPY . .
 
-RUN npm install
-# RUN pnpm run start
+# Dependencies are copied and installed before the source so this layer is
+# reused whenever only application code changes.
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+COPY src ./src
+
+ENV NODE_ENV=production
+
+# Run as the unprivileged user the node image already provides.
+USER node
 
 EXPOSE ${PORT}
 

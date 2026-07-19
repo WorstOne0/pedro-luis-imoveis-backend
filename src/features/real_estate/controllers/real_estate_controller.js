@@ -2,11 +2,26 @@
 import RealEstate from "../models/real_estate.js";
 //
 import mongoose from "mongoose";
-import buildQuery from "./real_estate_query.js";
+import buildQuery from "../utils/real_estate_query.js";
 
 // Fields a client is allowed to write. Anything else in the body is dropped so
 // a caller cannot reach schema fields we never meant to expose.
-const WRITABLE = ["title", "description", "type", "sale", "price", "area", "rooms", "bathrooms", "garages", "featured", "address", "images", "thumbnail"];
+const WRITABLE = [
+  "title",
+  "description",
+  "type",
+  "sale",
+  "price",
+  "area",
+  "rooms",
+  "bathrooms",
+  "garages",
+  "featured",
+  "features",
+  "address",
+  "images",
+  "thumbnail",
+];
 
 const pick = (source, keys) =>
   keys.reduce((acc, key) => {
@@ -28,32 +43,20 @@ const parseBody = (body) => {
   return pick(merged, WRITABLE);
 };
 
-const fail = (res, status, message) => res.status(status).json({ status, message });
-
 export default {
   get: async (req, res) => {
     try {
-      const { filter, options } = buildQuery(req.query);
-      const result = await RealEstate.paginate(filter, options);
+      const { filter, sort, limit } = buildQuery(req.query);
 
-      // `payload` stays a plain array so existing clients keep working; the
-      // pagination metadata rides alongside it.
-      return res.status(200).json({
-        status: 200,
-        payload: result.docs,
-        pagination: {
-          page: result.page,
-          limit: result.limit,
-          totalDocs: result.totalDocs,
-          totalPages: result.totalPages,
-          hasNextPage: result.hasNextPage,
-          hasPrevPage: result.hasPrevPage,
-        },
-        message: "Ok!",
-      });
+      const query = RealEstate.find(filter).sort(sort);
+      if (limit) query.limit(limit);
+
+      const realEstateList = await query;
+
+      return res.status(200).json({ status: 200, payload: realEstateList, total: realEstateList.length, message: "Ok!" });
     } catch (error) {
       console.log("Error - real_estate_controller.js - get", error);
-      return fail(res, 500, "Erro ao listar imóveis");
+      return res.status(500).json({ status: 500, message: "Erro ao listar imóveis" });
     }
   },
   getById: async (req, res) => {
@@ -61,12 +64,12 @@ export default {
 
     try {
       const realEstate = await RealEstate.findOne({ _id });
-      if (!realEstate) return fail(res, 404, "Imóvel não encontrado");
+      if (!realEstate) return res.status(404).json({ status: 404, message: "Imóvel não encontrado" });
 
       return res.status(200).json({ status: 200, payload: realEstate, message: "Ok!" });
     } catch (error) {
       console.log("Error - real_estate_controller.js - getById", error);
-      return fail(res, 500, "Erro ao buscar imóvel");
+      return res.status(500).json({ status: 500, message: "Erro ao buscar imóvel" });
     }
   },
   create: async (req, res) => {
@@ -78,10 +81,10 @@ export default {
     } catch (error) {
       console.log("Error - real_estate_controller.js - create", error);
 
-      if (error instanceof SyntaxError) return fail(res, 400, "Metadata inválida");
-      if (error.name === "ValidationError") return fail(res, 400, error.message);
+      if (error instanceof SyntaxError) return res.status(400).json({ status: 400, message: "Metadata inválida" });
+      if (error.name === "ValidationError") return res.status(400).json({ status: 400, message: error.message });
 
-      return fail(res, 500, "Erro ao criar imóvel");
+      return res.status(500).json({ status: 500, message: "Erro ao criar imóvel" });
     }
   },
   update: async (req, res) => {
@@ -91,16 +94,16 @@ export default {
       const body = parseBody(req.body);
 
       const realEstate = await RealEstate.findOneAndUpdate({ _id }, body, { new: true, runValidators: true });
-      if (!realEstate) return fail(res, 404, "Imóvel não encontrado");
+      if (!realEstate) return res.status(404).json({ status: 404, message: "Imóvel não encontrado" });
 
       return res.status(200).json({ status: 200, payload: realEstate, message: "Ok!" });
     } catch (error) {
       console.log("Error - real_estate_controller.js - update", error);
 
-      if (error instanceof SyntaxError) return fail(res, 400, "Metadata inválida");
-      if (error.name === "ValidationError") return fail(res, 400, error.message);
+      if (error instanceof SyntaxError) return res.status(400).json({ status: 400, message: "Metadata inválida" });
+      if (error.name === "ValidationError") return res.status(400).json({ status: 400, message: error.message });
 
-      return fail(res, 500, "Erro ao atualizar imóvel");
+      return res.status(500).json({ status: 500, message: "Erro ao atualizar imóvel" });
     }
   },
   remove: async (req, res) => {
@@ -108,17 +111,17 @@ export default {
 
     try {
       const realEstate = await RealEstate.findOneAndDelete({ _id });
-      if (!realEstate) return fail(res, 404, "Imóvel não encontrado");
+      if (!realEstate) return res.status(404).json({ status: 404, message: "Imóvel não encontrado" });
 
       return res.status(200).json({ status: 200, payload: realEstate, message: "Ok!" });
     } catch (error) {
       console.log("Error - real_estate_controller.js - remove", error);
-      return fail(res, 500, "Erro ao remover imóvel");
+      return res.status(500).json({ status: 500, message: "Erro ao remover imóvel" });
     }
   },
   //
   importOldDB: async (req, res) => {
-    if (process.env.ENABLE_LEGACY_IMPORT !== "true") return fail(res, 404, "Not Found");
+    if (process.env.ENABLE_LEGACY_IMPORT !== "true") return res.status(404).json({ status: 404, message: "Not Found" });
 
     try {
       console.log("Importing Old DB...");
@@ -287,7 +290,7 @@ export default {
       return res.status(200).json({ status: 200, payload: list, message: "Ok!" });
     } catch (error) {
       console.log(error);
-      return fail(res, 500, "Erro ao importar base antiga");
+      return res.status(500).json({ status: 500, message: "Erro ao importar base antiga" });
     }
   },
 };

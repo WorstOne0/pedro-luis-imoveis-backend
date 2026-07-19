@@ -1,26 +1,30 @@
 services:
   backend:
-    restart: unless-stopped
     build: .
+    container_name: pedro_luis_imoveis_backend
+    restart: unless-stopped
+    # Everything comes from .env; nothing secret is written in this file.
+    env_file:
+      - .env
     environment:
-      - MONGO_DB=mongodb://user:pass@mongodb
+      # nginx-proxy reads these to route the domain to this container.
       - LETSENCRYPT_HOST=${HOST}
       - VIRTUAL_HOST=${HOST}
       - VIRTUAL_PORT=${PORT}
-    ports:
-      - ${PORT}:${PORT}
+      # The dashboard posts listing photos and video here before they are
+      # forwarded to the image service, so this needs the same headroom.
+      - CLIENT_MAX_BODY_SIZE=320m
     expose:
       - ${PORT}
-    depends_on:
-      - mongodb
-  # mongodb:
-  #   image: mongodb/mongodb-community-server:6.0-ubi8
-  #   restart: unless-stopped
-  #   environment:
-  #     - MONGO_INITDB_ROOT_USERNAME=user
-  #     - MONGO_INITDB_ROOT_PASSWORD=pass
-  #     - MONGO_INITDB_DATABASE=pedro_luis_imoveis
-  #   volumes:
-  #     - type: bind
-  #       source: ./data
-  #       target: /data/db
+    networks:
+      # pedro-net reaches the database and image service, nginx-proxy exposes
+      # this container to the internet.
+      - pedro-net
+      - nginx-proxy
+
+networks:
+  # docker network create pedro-net
+  pedro-net:
+    external: true
+  nginx-proxy:
+    external: true
