@@ -7,3 +7,6 @@
 
 # production
 /build
+# Production env - real secrets, never commit
+.env-prod
+.env-*
