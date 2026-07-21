@@ -13,14 +13,19 @@ const router = express.Router();
 // accept anyway.
 const MAX_UPLOAD = 300 * 1024 * 1024;
 
+// Must match MAX_FILES in the image service's config/upload.js. A gallery that
+// passes here only to be rejected one hop later is the worst of both.
+const MAX_GALLERY = 30;
+
 const tempMulter = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_UPLOAD, files: 11 },
+  // +1 for the thumbnail, which arrives as its own field.
+  limits: { fileSize: MAX_UPLOAD, files: MAX_GALLERY + 1 },
 });
 
 const uploadFields = tempMulter.fields([
   { name: "thumbnail", maxCount: 1 },
-  { name: "images", maxCount: 10 },
+  { name: "images", maxCount: MAX_GALLERY },
 ]);
 
 router.get("/real_estate", realEstateController.get);

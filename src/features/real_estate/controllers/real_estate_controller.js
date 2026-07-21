@@ -40,7 +40,12 @@ const parseBody = (body) => {
   const merged = { ...metadata };
 
   if (body.thumbnail !== undefined) merged.thumbnail = body.thumbnail;
-  if (body.images !== undefined) merged.images = body.images;
+
+  // Kept images (urls the client sent back in metadata) plus newly uploaded
+  // ones, in that order. Uploads used to overwrite the whole gallery, so adding
+  // one photo on edit silently deleted the rest — which is why the dashboard
+  // could not offer a per-image delete.
+  if (body.images !== undefined) merged.images = [...(metadata.images ?? []), ...body.images];
 
   return pick(merged, WRITABLE);
 };
@@ -95,8 +100,21 @@ export default {
     try {
       const body = parseBody(req.body);
 
+      // Read first so the files that are about to be dropped can be identified.
+      const previous = await RealEstate.findOne({ _id }).lean();
+      if (!previous) return res.status(404).json({ status: 404, message: "Imóvel não encontrado" });
+
       const realEstate = await RealEstate.findOneAndUpdate({ _id }, body, { new: true, runValidators: true });
-      if (!realEstate) return res.status(404).json({ status: 404, message: "Imóvel não encontrado" });
+
+      // Anything the record no longer references is now unreachable. Without
+      // this every edit left its replaced images on disk forever.
+      const kept = new Set([realEstate.thumbnail, ...(realEstate.images ?? [])]);
+      const orphaned = [previous.thumbnail, ...(previous.images ?? [])].filter((url) => url && !kept.has(url));
+
+      if (orphaned.length > 0) {
+        const { failed } = await deleteFromImageServer(orphaned, req.headers.authorization);
+        if (failed.length > 0) console.log(`Warning - real_estate ${_id} updated, but these files remain:`, failed);
+      }
 
       return res.status(200).json({ status: 200, payload: realEstate, message: "Ok!" });
     } catch (error) {
